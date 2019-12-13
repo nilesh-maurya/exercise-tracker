@@ -5,6 +5,7 @@ const shortId = require("shortid");
 const cors = require("cors");
 
 const mongoose = require("mongoose");
+const Schema = mongoose.Schema;
 mongoose.connect(process.env.MLAB_URI || "mongodb://localhost/exercise-track", {
   useNewUrlParser: true,
   useUnifiedTopology: true
@@ -28,6 +29,17 @@ const User = mongoose.model("User", {
   }
 });
 
+const Exercise = mongoose.model(
+  "Exercise",
+  mongoose.Schema({
+    username: String,
+    userId: { type: String, ref: "User" },
+    description: String,
+    duration: Number,
+    date: Date
+  })
+);
+
 app.get("/", (req, res) => {
   res.sendFile(__dirname + "/views/index.html");
 });
@@ -47,6 +59,57 @@ app.get("/api/exercise/users", function(req, res) {
     if (err) throw err;
     res.json(data);
   });
+});
+
+app.route("/api/exercise/add").post(function(req, res) {
+  req.body.date = req.body.date || new Date();
+  if (!req.body.userId || !req.body.description || !req.body.duration) {
+    return res.send("Must enter userId, description and duration fields");
+  }
+
+  User.findOne({ _id: req.body.userId })
+    .then(user => {
+      console.log(user);
+      if (!user) return res.send("no user exists with that Id");
+      req.body.username = user.username;
+      Exercise.create(req.body).then(exercise => {
+        console.log(exercise);
+        res.json(exercise);
+      });
+    })
+    .catch(err => {
+      console.log(err);
+    });
+});
+
+app.get("/api/exercise/log", function(req, res) {
+  const userId = req.query.userId;
+  const from = req.query.from;
+  const to = req.query.to;
+  const limit = Number(req.query.limit) || 0;
+  
+  if( (from && !to) || (!from && to) )
+  {
+    return res.send("both from and to should be provided in format (yyyy-mm-dd)");
+  }
+  console.log(limit);
+  Exercise.find({ userId: userId }).limit(limit).then(exercises => {
+    console.log(exercises);
+    exercises = exercises.map(exercise => {
+      const { _id, description, duration, date } = exercise;
+      return { _id, description, duration, date };
+    });
+  
+    res.json({
+      _id: userId,
+      username: exercises[0].username,
+      count: exercises.length,
+      log: exercises
+    });
+  }).catch(err => {
+    console.log(err);
+  })
+  
 });
 
 // Not found middleware
